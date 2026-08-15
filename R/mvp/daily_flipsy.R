@@ -296,6 +296,8 @@ generate_daily_puzzle <- function(
     
     moves = 0L,
     
+    move_history = list(),
+    
     solved = FALSE,
     
     failed = FALSE,
@@ -352,6 +354,11 @@ make_daily_move <- function(
   # ----------------------------------------------------------
   
   game$moves <- game$moves + 1L
+  
+  game$move_history[[length(game$move_history) + 1]] <- list(
+    row = row,
+    col = col
+  )
   
   
   # ----------------------------------------------------------
@@ -712,6 +719,54 @@ add_daily_solution <- function(game) {
   
   game$solution_final_board <-
     solution$final_board
+  
+  
+  game
+}
+
+# ============================================================
+# Restore Daily from saved move history
+# ============================================================
+
+restore_daily_game <- function(
+    date,
+    move_history
+) {
+  
+  game <- generate_daily_puzzle(
+    date
+  )
+  
+  game <- add_daily_solution(
+    game
+  )
+  
+  
+  if (
+    is.null(move_history) ||
+    length(move_history) == 0
+  ) {
+    
+    return(game)
+  }
+  
+  
+  for (move in move_history) {
+    
+    if (game$finished) {
+      break
+    }
+    
+    
+    game <- make_daily_move(
+      
+      game = game,
+      
+      row = as.integer(move$row),
+      
+      col = as.integer(move$col)
+    )
+  }
   
   
   game

@@ -229,6 +229,65 @@ ui <- fluidPage(
       content = "width=device-width, initial-scale=1"
     ),
     
+    tags$script(
+      HTML("
+
+    // ========================================================
+    // FLIPSY Daily localStorage
+    // ========================================================
+
+    Shiny.addCustomMessageHandler(
+      'save_daily_state',
+      function(message) {
+
+        var key = 'flipsy_daily_' + message.date;
+
+        localStorage.setItem(
+          key,
+          JSON.stringify(message)
+        );
+      }
+    );
+
+
+    Shiny.addCustomMessageHandler(
+      'load_daily_state',
+      function(message) {
+
+        var key = 'flipsy_daily_' + message.date;
+
+        var saved = localStorage.getItem(key);
+
+        var parsed = null;
+
+        if (saved !== null) {
+
+          try {
+
+            parsed = JSON.parse(saved);
+
+          } catch (e) {
+
+            console.error(
+              'Could not parse saved FLIPSY Daily state.',
+              e
+            );
+          }
+        }
+
+
+        Shiny.setInputValue(
+          'daily_saved_state',
+          parsed,
+          {priority: 'event'}
+        );
+      }
+    );
+
+  ")
+    ),
+    
+    
     tags$style(
       
       HTML("
@@ -630,8 +689,7 @@ ui <- fluidPage(
 # ============================================================
 
 server <- function(input, output, session) {
-  
-  
+
   # ==========================================================
   # Application state
   # ==========================================================
@@ -673,23 +731,93 @@ server <- function(input, output, session) {
   # ==========================================================
   # Start Daily
   # ==========================================================
+  save_daily_to_browser <- function(game) {
+    
+    moves <- lapply(
+      game$move_history,
+      function(move) {
+        
+        list(
+          row = as.integer(move$row),
+          col = as.integer(move$col)
+        )
+      }
+    )
+    
+    
+    session$sendCustomMessage(
+      
+      "save_daily_state",
+      
+      list(
+        date = as.character(game$date),
+        moves = moves
+      )
+    )
+  }
+  
   
   start_daily_game <- function() {
     
+    today <- Sys.Date()
+    
+    
+    # Generate the Daily immediately.
+    # This gives us something valid to display while the browser
+    # checks whether an existing attempt is stored.
+    
     game <- generate_daily_puzzle(
-      Sys.Date()
+      today
     )
     
     game <- add_daily_solution(
       game
     )
     
+    
     state$daily_game <- game
     
     state$screen <- "daily"
+    
+    
+    # Ask JavaScript/localStorage whether this browser already
+    # has an attempt for today's puzzle.
+    
+    session$sendCustomMessage(
+      
+      "load_daily_state",
+      
+      list(
+        date = as.character(today)
+      )
+    )
   }
   
-  
+  observeEvent(
+    input$daily_saved_state,
+    {
+      
+      saved <- input$daily_saved_state
+      
+      if (
+        is.null(saved) ||
+        is.null(saved$moves)
+      ) {
+        return()
+      }
+      
+      move_history <- saved$moves
+      
+      restored <- restore_daily_game(
+        date = Sys.Date(),
+        move_history = move_history
+      )
+      
+      state$daily_game <- restored
+    },
+    
+    ignoreInit = TRUE
+  )
   # ==========================================================
   # HOME
   # ==========================================================
@@ -1502,6 +1630,11 @@ server <- function(input, output, session) {
         row = row,
         
         col = col
+      )
+      
+      
+      save_daily_to_browser(
+        state$daily_game
       )
     },
     
