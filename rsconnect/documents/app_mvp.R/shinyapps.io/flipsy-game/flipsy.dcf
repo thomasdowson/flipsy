@@ -1,0 +1,10 @@
+name: flipsy
+title:
+username: flipsy-game
+account: flipsy-game
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17706593
+bundleId: 12415821
+url: https://flipsy-game.shinyapps.io/flipsy/
+version: 1
