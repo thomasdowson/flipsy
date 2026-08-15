@@ -1,25 +1,6 @@
 # ============================================================
 # FLIPSY - Minimum Viable Game
 # ============================================================
-#
-# MVP structure:
-#
-# HOME
-#   |
-#   +-- QUICK PLAY
-#   |      |
-#   |      +-- EASY
-#   |      +-- MEDIUM
-#   |      +-- HARD
-#   |
-#   +-- DAILY FLIPSY
-#          |
-#          +-- Coming next
-#
-# Every puzzle has a minimum 5-move solution.
-#
-# ============================================================
-
 
 library(shiny)
 
@@ -35,7 +16,9 @@ source("R/v_2/puzzle_generator_v2.R")
 source("R/v_2/shape_visualiser_v2.R")
 
 source("R/v_3_shapes.R")
+
 source("R/mvp/quick_play.R")
+source("R/mvp/daily_flipsy.R")
 
 
 # ============================================================
@@ -45,7 +28,6 @@ source("R/mvp/quick_play.R")
 render_shape_mvp <- function(shape) {
   
   mat <- shape$matrix
-  
   cells <- list()
   
   for (row in seq_len(nrow(mat))) {
@@ -79,7 +61,6 @@ render_shape_mvp <- function(shape) {
     }
   }
   
-  
   div(
     
     class = "shape-grid",
@@ -94,6 +75,143 @@ render_shape_mvp <- function(shape) {
     ),
     
     cells
+  )
+}
+
+
+# ============================================================
+# Normal board renderer
+# ============================================================
+
+build_board_ui <- function(
+    board,
+    input_name,
+    disabled = FALSE
+) {
+  
+  n <- nrow(board)
+  
+  squares <- lapply(
+    
+    seq_len(n * n),
+    
+    function(i) {
+      
+      row <- ((i - 1) %/% n) + 1
+      col <- ((i - 1) %% n) + 1
+      
+      colour_class <- if (
+        board[row, col]
+      ) {
+        "black-square"
+      } else {
+        "white-square"
+      }
+      
+      onclick_code <- ""
+      
+      if (!disabled) {
+        
+        onclick_code <- sprintf(
+          "
+          Shiny.setInputValue(
+            '%s',
+            '%s',
+            {priority: 'event'}
+          );
+          ",
+          input_name,
+          paste(row, col, sep = "_")
+        )
+      }
+      
+      tags$button(
+        
+        type = "button",
+        
+        class = paste(
+          "square-button",
+          colour_class
+        ),
+        
+        onclick = onclick_code,
+        
+        disabled = if (disabled) {
+          "disabled"
+        } else {
+          NULL
+        }
+      )
+    }
+  )
+  
+  div(
+    class = "game-board",
+    squares
+  )
+}
+
+
+# ============================================================
+# Solution mini-board
+# ============================================================
+#
+# The optimal S position is shown in light blue.
+# ============================================================
+
+build_solution_board <- function(
+    board,
+    highlight_row = NULL,
+    highlight_col = NULL
+) {
+  
+  n <- nrow(board)
+  
+  squares <- lapply(
+    
+    seq_len(n * n),
+    
+    function(i) {
+      
+      row <- ((i - 1) %/% n) + 1
+      col <- ((i - 1) %% n) + 1
+      
+      highlighted <- (
+        !is.null(highlight_row) &&
+          !is.null(highlight_col) &&
+          row == highlight_row &&
+          col == highlight_col
+      )
+      
+      if (highlighted) {
+        
+        square_class <- "solution-square solution-highlight"
+        
+        label <- "S"
+        
+      } else if (board[row, col]) {
+        
+        square_class <- "solution-square solution-black"
+        
+        label <- ""
+        
+      } else {
+        
+        square_class <- "solution-square solution-white"
+        
+        label <- ""
+      }
+      
+      div(
+        class = square_class,
+        label
+      )
+    }
+  )
+  
+  div(
+    class = "solution-board",
+    squares
   )
 }
 
@@ -115,10 +233,6 @@ ui <- fluidPage(
       
       HTML("
 
-        /* ==================================================
-           PAGE
-           ================================================== */
-
         html,
         body {
           margin: 0;
@@ -128,15 +242,13 @@ ui <- fluidPage(
           font-family: Arial, Helvetica, sans-serif;
         }
 
-
         body {
           min-height: 100vh;
         }
 
-
         .app-shell {
           width: 100%;
-          max-width: 520px;
+          max-width: 620px;
           margin: 0 auto;
           padding: 35px 20px 50px 20px;
           text-align: center;
@@ -144,9 +256,7 @@ ui <- fluidPage(
         }
 
 
-        /* ==================================================
-           BRAND
-           ================================================== */
+        /* BRAND */
 
         .logo {
           font-size: 42px;
@@ -156,7 +266,6 @@ ui <- fluidPage(
           margin-bottom: 8px;
         }
 
-
         .tagline {
           font-size: 15px;
           color: #555555;
@@ -165,9 +274,7 @@ ui <- fluidPage(
         }
 
 
-        /* ==================================================
-           HEADINGS
-           ================================================== */
+        /* HEADINGS */
 
         .screen-title {
           font-size: 16px;
@@ -176,17 +283,21 @@ ui <- fluidPage(
           margin-bottom: 10px;
         }
 
-
         .screen-subtitle {
           font-size: 13px;
           color: #666666;
           margin-bottom: 28px;
         }
 
+        .daily-number {
+          font-size: 12px;
+          color: #777777;
+          letter-spacing: 2px;
+          margin-bottom: 18px;
+        }
 
-        /* ==================================================
-           BUTTONS
-           ================================================== */
+
+        /* BUTTONS */
 
         .main-button,
         .difficulty-button,
@@ -206,7 +317,6 @@ ui <- fluidPage(
           outline: none;
         }
 
-
         .main-button:hover,
         .difficulty-button:hover,
         .control-button:hover,
@@ -217,165 +327,115 @@ ui <- fluidPage(
           border-color: #111111;
         }
 
-
         .main-button {
-
           width: 240px;
           height: 52px;
-
           margin: 7px auto;
-
           display: block;
-
           font-size: 14px;
         }
 
-
         .difficulty-button {
-
           width: 150px;
           height: 48px;
-
           margin: 7px auto;
-
           display: block;
-
           font-size: 13px;
         }
 
-
         .control-button {
-
-          min-width: 90px;
+          min-width: 105px;
           height: 40px;
-
           margin: 4px;
-
           font-size: 11px;
         }
-
 
         .back-button {
-
           min-width: 90px;
           height: 38px;
-
           margin-top: 22px;
-
           border-width: 1px;
-
           font-size: 11px;
         }
 
 
-        /* ==================================================
-           QUICK PLAY GAME
-           ================================================== */
+        /* SHAPE */
 
         .difficulty-name {
-
           font-size: 12px;
           letter-spacing: 3px;
           color: #555555;
-
           margin-bottom: 18px;
         }
 
-
         .shape-title {
-
           font-size: 10px;
           letter-spacing: 3px;
           color: #777777;
-
           margin-bottom: 9px;
         }
 
-
         .shape-grid {
-
           display: grid;
-
           gap: 3px;
-
           justify-content: center;
-
           width: fit-content;
-
           margin: 0 auto 22px auto;
         }
 
-
         .shape-block {
-
           width: 23px;
           height: 23px;
-
           background: #111111;
           color: #ffffff;
-
           display: flex;
           justify-content: center;
           align-items: center;
-
           border-radius: 2px;
-
           font-size: 11px;
           font-weight: bold;
         }
 
 
-        /* ==================================================
-           BOARD
-           ================================================== */
+        /* GAME BOARD */
 
         .game-board {
-
           display: grid;
-
           grid-template-columns: repeat(5, 62px);
-
           gap: 5px;
-
           justify-content: center;
-
           margin: 18px auto 22px auto;
         }
 
-
         .square-button {
-
           width: 62px;
           height: 62px;
-
           padding: 0;
-
           border: 2px solid #555555;
           border-radius: 4px;
-
           cursor: pointer;
-
           outline: none;
           box-shadow: none;
         }
 
+        .square-button:disabled {
+          opacity: 1;
+          cursor: default;
+        }
 
         .black-square {
           background: #111111;
         }
 
-
         .white-square {
           background: #f7f7f7;
         }
-
 
         .black-square:hover,
         .black-square:focus,
         .black-square:active {
           background: #111111;
         }
-
 
         .white-square:hover,
         .white-square:focus,
@@ -384,138 +444,149 @@ ui <- fluidPage(
         }
 
 
-        .square-button:hover {
-          border-color: #000000;
-        }
-
-
-        /* ==================================================
-           STATS
-           ================================================== */
+        /* STATS */
 
         .stats-row {
-
           display: flex;
-
           justify-content: center;
-
           gap: 55px;
-
           margin-top: 8px;
           margin-bottom: 17px;
         }
 
-
         .stat {
-
           min-width: 80px;
         }
 
-
         .stat-label {
-
           font-size: 10px;
-
           letter-spacing: 2px;
-
           color: #777777;
-
           margin-bottom: 3px;
         }
 
-
         .stat-value {
-
           font-size: 25px;
-
           font-weight: bold;
         }
 
+        .daily-moves {
+          margin: 10px auto 16px auto;
+        }
 
-        /* ==================================================
-           RESULT
-           ================================================== */
+
+        /* RESULTS */
 
         .result {
-
           margin-top: 18px;
-
           font-size: 20px;
-
           font-weight: bold;
-
           letter-spacing: 1px;
         }
 
-
         .result-perfect {
-
           font-size: 13px;
-
           color: #555555;
-
           margin-top: 5px;
         }
 
-
-        /* ==================================================
-           DAILY PLACEHOLDER
-           ================================================== */
-
-        .daily-placeholder {
-
-          margin: 45px auto 20px auto;
-
-          max-width: 300px;
-
-          padding: 25px;
-
-          border: 1px solid #cccccc;
-
-          border-radius: 5px;
-        }
-
-
-        .coming-soon {
-
-          font-size: 14px;
-
-          letter-spacing: 3px;
-
+        .failed-result {
+          margin-top: 18px;
+          font-size: 20px;
           font-weight: bold;
-
-          margin-bottom: 12px;
+          letter-spacing: 2px;
         }
 
 
-        /* ==================================================
-           HOW TO PLAY
-           ================================================== */
+        /* HOW TO PLAY */
 
         .how-to {
-
           max-width: 360px;
-
           margin: 0 auto;
-
           text-align: left;
-
           line-height: 1.6;
-
           font-size: 14px;
-
           color: #333333;
         }
-
 
         .how-to strong {
           color: #111111;
         }
 
 
-        /* ==================================================
-           MOBILE
-           ================================================== */
+        /* SOLUTION VIEWER */
+
+        .solution-intro {
+          max-width: 420px;
+          margin: 0 auto 28px auto;
+          color: #555555;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .solution-step {
+          margin: 0 auto 25px auto;
+        }
+
+        .solution-step-title {
+          font-size: 11px;
+          font-weight: bold;
+          letter-spacing: 2px;
+          margin-bottom: 8px;
+        }
+
+        .solution-board {
+          display: grid;
+          grid-template-columns: repeat(5, 30px);
+          gap: 3px;
+          justify-content: center;
+          margin: 0 auto;
+        }
+
+        .solution-square {
+          width: 30px;
+          height: 30px;
+          box-sizing: border-box;
+          border: 1px solid #555555;
+          border-radius: 2px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 11px;
+          font-weight: bold;
+        }
+
+        .solution-black {
+          background: #111111;
+          color: #ffffff;
+        }
+
+        .solution-white {
+          background: #f7f7f7;
+          color: #111111;
+        }
+
+        .solution-highlight {
+          background: #9fd8f5;
+          color: #111111;
+          border: 2px solid #4a9bc5;
+        }
+
+        .solution-arrow {
+          font-size: 18px;
+          margin: 7px 0;
+          color: #777777;
+        }
+
+        .solved-label {
+          margin-top: 8px;
+          font-size: 11px;
+          letter-spacing: 2px;
+          font-weight: bold;
+        }
+
+
+        /* MOBILE */
 
         @media (max-width: 420px) {
 
@@ -524,26 +595,19 @@ ui <- fluidPage(
             padding-right: 10px;
           }
 
-
           .logo {
             font-size: 36px;
           }
 
-
           .game-board {
-
             grid-template-columns: repeat(5, 54px);
-
             gap: 4px;
           }
 
-
           .square-button {
-
             width: 54px;
             height: 54px;
           }
-
 
           .stats-row {
             gap: 35px;
@@ -554,14 +618,9 @@ ui <- fluidPage(
     )
   ),
   
-  
   div(
-    
     class = "app-shell",
-    
-    uiOutput(
-      "screen"
-    )
+    uiOutput("screen")
   )
 )
 
@@ -579,19 +638,18 @@ server <- function(input, output, session) {
   
   state <- reactiveValues(
     
-    screen =
-      "home",
+    screen = "home",
     
-    selected_difficulty =
-      NULL,
+    selected_difficulty = NULL,
     
-    quick_game =
-      NULL
+    quick_game = NULL,
+    
+    daily_game = NULL
   )
   
   
   # ==========================================================
-  # Helper: start Quick Play game
+  # Start Quick Play
   # ==========================================================
   
   start_quick_game <- function(
@@ -599,28 +657,41 @@ server <- function(input, output, session) {
     exclude_family_index = NULL
   ) {
     
-    state$selected_difficulty <-
-      difficulty
+    state$selected_difficulty <- difficulty
     
+    state$quick_game <- generate_quick_puzzle(
+      
+      difficulty = difficulty,
+      
+      exclude_family_index = exclude_family_index
+    )
     
-    state$quick_game <-
-      generate_quick_puzzle(
-        
-        difficulty =
-          difficulty,
-        
-        exclude_family_index =
-          exclude_family_index
-      )
-    
-    
-    state$screen <-
-      "quick_game"
+    state$screen <- "quick_game"
   }
   
   
   # ==========================================================
-  # HOME SCREEN
+  # Start Daily
+  # ==========================================================
+  
+  start_daily_game <- function() {
+    
+    game <- generate_daily_puzzle(
+      Sys.Date()
+    )
+    
+    game <- add_daily_solution(
+      game
+    )
+    
+    state$daily_game <- game
+    
+    state$screen <- "daily"
+  }
+  
+  
+  # ==========================================================
+  # HOME
   # ==========================================================
   
   home_screen <- function() {
@@ -632,7 +703,6 @@ server <- function(input, output, session) {
         "FLIPSY"
       ),
       
-      
       div(
         
         class = "tagline",
@@ -643,33 +713,21 @@ server <- function(input, output, session) {
         )
       ),
       
-      
       actionButton(
-        
         "go_quick",
-        
         "QUICK PLAY",
-        
         class = "main-button"
       ),
       
-      
       actionButton(
-        
         "go_daily",
-        
         "DAILY FLIPSY",
-        
         class = "main-button"
       ),
       
-      
       actionButton(
-        
         "go_help",
-        
         "HOW TO PLAY",
-        
         class = "main-button"
       )
     )
@@ -677,7 +735,7 @@ server <- function(input, output, session) {
   
   
   # ==========================================================
-  # DIFFICULTY SCREEN
+  # DIFFICULTY SELECT
   # ==========================================================
   
   difficulty_screen <- function() {
@@ -689,55 +747,37 @@ server <- function(input, output, session) {
         "FLIPSY"
       ),
       
-      
       div(
         class = "screen-title",
         "QUICK PLAY"
       ),
-      
       
       div(
         class = "screen-subtitle",
         "Choose your difficulty"
       ),
       
-      
       actionButton(
-        
         "choose_easy",
-        
         "EASY",
-        
         class = "difficulty-button"
       ),
       
-      
       actionButton(
-        
         "choose_medium",
-        
         "MEDIUM",
-        
         class = "difficulty-button"
       ),
       
-      
       actionButton(
-        
         "choose_hard",
-        
         "HARD",
-        
         class = "difficulty-button"
       ),
       
-      
       actionButton(
-        
         "difficulty_home",
-        
         "← BACK",
-        
         class = "back-button"
       )
     )
@@ -745,23 +785,14 @@ server <- function(input, output, session) {
   
   
   # ==========================================================
-  # QUICK PLAY SCREEN
+  # QUICK PLAY
   # ==========================================================
   
   quick_game_screen <- function() {
     
     game <- state$quick_game
     
-    
-    req(
-      game
-    )
-    
-    
-    difficulty_text <- toupper(
-      game$difficulty
-    )
-    
+    req(game)
     
     tagList(
       
@@ -770,28 +801,23 @@ server <- function(input, output, session) {
         "FLIPSY"
       ),
       
-      
       div(
         class = "difficulty-name",
-        difficulty_text
+        toupper(game$difficulty)
       ),
-      
       
       div(
         class = "shape-title",
         "SHAPE"
       ),
       
-      
       render_shape_mvp(
         game$shape
       ),
       
-      
       div(
         
         class = "stats-row",
-        
         
         div(
           
@@ -807,7 +833,6 @@ server <- function(input, output, session) {
             game$moves
           )
         ),
-        
         
         div(
           
@@ -825,11 +850,11 @@ server <- function(input, output, session) {
         )
       ),
       
-      
       build_board_ui(
-        game
+        board = game$board,
+        input_name = "quick_square_click",
+        disabled = game$solved
       ),
-      
       
       if (game$solved) {
         
@@ -856,7 +881,6 @@ server <- function(input, output, session) {
             }
           ),
           
-          
           if (
             game$moves ==
             game$optimal_moves
@@ -870,36 +894,24 @@ server <- function(input, output, session) {
         )
       },
       
-      
       div(
         
         actionButton(
-          
           "quick_reset",
-          
           "RESET",
-          
           class = "control-button"
         ),
         
-        
         actionButton(
-          
           "quick_new",
-          
           "NEW",
-          
           class = "control-button"
         )
       ),
       
-      
       actionButton(
-        
         "quick_home",
-        
         "← HOME",
-        
         class = "back-button"
       )
     )
@@ -907,92 +919,14 @@ server <- function(input, output, session) {
   
   
   # ==========================================================
-  # BOARD BUILDER
-  # ==========================================================
-  
-  build_board_ui <- function(game) {
-    
-    board <- game$board
-    
-    
-    squares <- lapply(
-      
-      seq_len(
-        quick_grid_size *
-          quick_grid_size
-      ),
-      
-      function(i) {
-        
-        row <-
-          ((i - 1) %/%
-             quick_grid_size) + 1
-        
-        
-        col <-
-          ((i - 1) %%
-             quick_grid_size) + 1
-        
-        
-        colour_class <- if (
-          board[row, col]
-        ) {
-          
-          "black-square"
-          
-        } else {
-          
-          "white-square"
-        }
-        
-        
-        tags$button(
-          
-          type =
-            "button",
-          
-          class =
-            paste(
-              "square-button",
-              colour_class
-            ),
-          
-          onclick =
-            sprintf(
-              
-              "
-              Shiny.setInputValue(
-                'quick_square_click',
-                '%s',
-                {priority: 'event'}
-              );
-              ",
-              
-              paste(
-                row,
-                col,
-                sep = "_"
-              )
-            )
-        )
-      }
-    )
-    
-    
-    div(
-      
-      class = "game-board",
-      
-      squares
-    )
-  }
-  
-  
-  # ==========================================================
-  # DAILY PLACEHOLDER
+  # DAILY FLIPSY
   # ==========================================================
   
   daily_screen <- function() {
+    
+    game <- state$daily_game
+    
+    req(game)
     
     tagList(
       
@@ -1001,35 +935,217 @@ server <- function(input, output, session) {
         "FLIPSY"
       ),
       
-      
       div(
         class = "screen-title",
         "DAILY FLIPSY"
       ),
       
-      
       div(
-        
-        class = "daily-placeholder",
-        
-        div(
-          class = "coming-soon",
-          "COMING NEXT"
-        ),
-        
-        
-        div(
-          "One puzzle. 15 moves. No reset."
+        class = "daily-number",
+        paste0(
+          "#",
+          game$daily_number
         )
       ),
       
+      div(
+        class = "shape-title",
+        "SHAPE"
+      ),
+      
+      render_shape_mvp(
+        game$shape
+      ),
+      
+      div(
+        
+        class = "daily-moves",
+        
+        div(
+          class = "stat-label",
+          "MOVES"
+        ),
+        
+        div(
+          class = "stat-value",
+          paste0(
+            game$moves,
+            " / ",
+            game$move_limit
+          )
+        )
+      ),
+      
+      build_board_ui(
+        board = game$board,
+        input_name = "daily_square_click",
+        disabled = game$finished
+      ),
+      
+      if (game$solved) {
+        
+        tagList(
+          
+          div(
+            
+            class = "result",
+            
+            if (
+              game$moves ==
+              game$optimal_moves
+            ) {
+              
+              "PERFECT!"
+              
+            } else {
+              
+              paste(
+                "SOLVED IN",
+                game$moves,
+                "MOVES"
+              )
+            }
+          ),
+          
+          if (
+            game$moves ==
+            game$optimal_moves
+          ) {
+            
+            div(
+              class = "result-perfect",
+              "Optimal solution found"
+            )
+          }
+        )
+      },
+      
+      if (game$failed) {
+        
+        div(
+          class = "failed-result",
+          "DAILY FLIPSY FAILED"
+        )
+      },
+      
+      if (game$finished) {
+        
+        actionButton(
+          "see_solution",
+          "SEE SOLUTION",
+          class = "main-button"
+        )
+      },
       
       actionButton(
-        
         "daily_home",
-        
         "← HOME",
+        class = "back-button"
+      )
+    )
+  }
+  
+  
+  # ==========================================================
+  # SOLUTION VIEWER
+  # ==========================================================
+  
+  solution_screen <- function() {
+    
+    game <- state$daily_game
+    
+    req(game)
+    req(game$finished)
+    req(game$solution_steps)
+    
+    step_ui <- list()
+    
+    for (
+      i in seq_along(
+        game$solution_steps
+      )
+    ) {
+      
+      step <- game$solution_steps[[i]]
+      
+      step_ui[[length(step_ui) + 1]] <-
         
+        div(
+          
+          class = "solution-step",
+          
+          div(
+            class = "solution-step-title",
+            paste(
+              "MOVE",
+              i
+            )
+          ),
+          
+          build_solution_board(
+            
+            board = step$board,
+            
+            highlight_row = step$row,
+            
+            highlight_col = step$col
+          )
+        )
+      
+      
+      step_ui[[length(step_ui) + 1]] <-
+        
+        div(
+          class = "solution-arrow",
+          "↓"
+        )
+    }
+    
+    
+    final_board_ui <- div(
+      
+      class = "solution-step",
+      
+      build_solution_board(
+        board = game$solution_final_board
+      ),
+      
+      div(
+        class = "solved-label",
+        "SOLVED"
+      )
+    )
+    
+    
+    tagList(
+      
+      div(
+        class = "logo",
+        "FLIPSY"
+      ),
+      
+      div(
+        class = "screen-title",
+        "THE 5-MOVE SOLUTION"
+      ),
+      
+      div(
+        
+        class = "solution-intro",
+        
+        HTML(
+          "The light-blue square shows where to place
+           <strong>S</strong> for each move."
+        )
+      ),
+      
+      step_ui,
+      
+      final_board_ui,
+      
+      actionButton(
+        "solution_back",
+        "← DAILY",
         class = "back-button"
       )
     )
@@ -1049,12 +1165,10 @@ server <- function(input, output, session) {
         "FLIPSY"
       ),
       
-      
       div(
         class = "screen-title",
         "HOW TO PLAY"
       ),
-      
       
       div(
         
@@ -1064,7 +1178,6 @@ server <- function(input, output, session) {
           "Your goal is to turn every square black."
         ),
         
-        
         p(
           
           HTML(
@@ -1072,7 +1185,6 @@ server <- function(input, output, session) {
              on a board square to make a move."
           )
         ),
-        
         
         p(
           
@@ -1082,11 +1194,9 @@ server <- function(input, output, session) {
           )
         ),
         
-        
         p(
           "The shape wraps around the edges of the board."
         ),
-        
         
         p(
           
@@ -1096,24 +1206,27 @@ server <- function(input, output, session) {
           )
         ),
         
+        p(
+          
+          HTML(
+            "<strong>Quick Play:</strong>
+             TO GO tells you the minimum number of moves
+             currently required to solve the puzzle."
+          )
+        ),
         
         p(
           
           HTML(
-            "In Quick Play, <strong>TO GO</strong>
-             tells you the minimum number of moves
-             currently required to solve the puzzle."
+            "<strong>Daily FLIPSY:</strong>
+             you have 15 moves, with no TO GO and no reset."
           )
         )
       ),
       
-      
       actionButton(
-        
         "help_home",
-        
         "← HOME",
-        
         class = "back-button"
       )
     )
@@ -1142,6 +1255,9 @@ server <- function(input, output, session) {
       daily =
         daily_screen(),
       
+      solution =
+        solution_screen(),
+      
       help =
         help_screen(),
       
@@ -1157,9 +1273,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$go_quick,
     {
-      
-      state$screen <-
-        "difficulty"
+      state$screen <- "difficulty"
     }
   )
   
@@ -1167,9 +1281,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$go_daily,
     {
-      
-      state$screen <-
-        "daily"
+      start_daily_game()
     }
   )
   
@@ -1177,9 +1289,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$go_help,
     {
-      
-      state$screen <-
-        "help"
+      state$screen <- "help"
     }
   )
   
@@ -1187,9 +1297,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$difficulty_home,
     {
-      
-      state$screen <-
-        "home"
+      state$screen <- "home"
     }
   )
   
@@ -1197,9 +1305,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$quick_home,
     {
-      
-      state$screen <-
-        "home"
+      state$screen <- "home"
     }
   )
   
@@ -1207,9 +1313,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$daily_home,
     {
-      
-      state$screen <-
-        "home"
+      state$screen <- "home"
     }
   )
   
@@ -1217,9 +1321,23 @@ server <- function(input, output, session) {
   observeEvent(
     input$help_home,
     {
-      
-      state$screen <-
-        "home"
+      state$screen <- "home"
+    }
+  )
+  
+  
+  observeEvent(
+    input$see_solution,
+    {
+      state$screen <- "solution"
+    }
+  )
+  
+  
+  observeEvent(
+    input$solution_back,
+    {
+      state$screen <- "daily"
     }
   )
   
@@ -1231,10 +1349,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$choose_easy,
     {
-      
-      start_quick_game(
-        "easy"
-      )
+      start_quick_game("easy")
     }
   )
   
@@ -1242,10 +1357,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$choose_medium,
     {
-      
-      start_quick_game(
-        "medium"
-      )
+      start_quick_game("medium")
     }
   )
   
@@ -1253,10 +1365,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$choose_hard,
     {
-      
-      start_quick_game(
-        "hard"
-      )
+      start_quick_game("hard")
     }
   )
   
@@ -1269,34 +1378,19 @@ server <- function(input, output, session) {
     input$quick_square_click,
     {
       
-      req(
-        state$quick_game
-      )
-      
+      req(state$quick_game)
       
       if (
-        state$screen !=
-        "quick_game"
-      ) {
-        
-        return()
-      }
-      
-      
-      if (
+        state$screen != "quick_game" ||
         state$quick_game$solved
       ) {
-        
         return()
       }
       
       
       coords <- strsplit(
-        
         input$quick_square_click,
-        
         "_"
-        
       )[[1]]
       
       
@@ -1304,24 +1398,19 @@ server <- function(input, output, session) {
         coords[1]
       )
       
-      
       col <- as.integer(
         coords[2]
       )
       
       
-      state$quick_game <-
-        make_quick_move(
-          
-          game =
-            state$quick_game,
-          
-          row =
-            row,
-          
-          col =
-            col
-        )
+      state$quick_game <- make_quick_move(
+        
+        game = state$quick_game,
+        
+        row = row,
+        
+        col = col
+      )
     },
     
     ignoreInit = TRUE
@@ -1336,10 +1425,7 @@ server <- function(input, output, session) {
     input$quick_reset,
     {
       
-      req(
-        state$quick_game
-      )
-      
+      req(state$quick_game)
       
       state$quick_game <-
         reset_quick_puzzle(
@@ -1350,17 +1436,14 @@ server <- function(input, output, session) {
   
   
   # ==========================================================
-  # Quick Play new puzzle
+  # Quick Play new
   # ==========================================================
   
   observeEvent(
     input$quick_new,
     {
       
-      req(
-        state$quick_game
-      )
-      
+      req(state$quick_game)
       
       old_family <-
         state$quick_game$family_index
@@ -1376,11 +1459,59 @@ server <- function(input, output, session) {
       )
     }
   )
+  
+  
+  # ==========================================================
+  # Daily move
+  # ==========================================================
+  
+  observeEvent(
+    input$daily_square_click,
+    {
+      
+      req(state$daily_game)
+      
+      
+      if (
+        state$screen != "daily" ||
+        state$daily_game$finished
+      ) {
+        return()
+      }
+      
+      
+      coords <- strsplit(
+        input$daily_square_click,
+        "_"
+      )[[1]]
+      
+      
+      row <- as.integer(
+        coords[1]
+      )
+      
+      col <- as.integer(
+        coords[2]
+      )
+      
+      
+      state$daily_game <- make_daily_move(
+        
+        game = state$daily_game,
+        
+        row = row,
+        
+        col = col
+      )
+    },
+    
+    ignoreInit = TRUE
+  )
 }
 
 
 # ============================================================
-# Run app
+# Run
 # ============================================================
 
 shinyApp(
